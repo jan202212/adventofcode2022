@@ -240,7 +240,7 @@ begin
 
     cpos 30,0
     cp "Round #{i}"
-    
+
     Curses.getch
   end
 
