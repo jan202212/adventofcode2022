@@ -22,6 +22,11 @@ def cp( str )
   Curses.addstr str
 end
 
+def cpp( x, y, str )
+  cpos( x, y )
+  cp( str )
+end
+
 def cpos( y, x )
   Curses.setpos( y, x )
 end
@@ -45,22 +50,35 @@ end
 class Elve
   @x = 0
   @y = 0
-  @proposed_x = 0
-  @proposed_y = 0
+  @proposed_x = -1
+  @proposed_y = -1
   @@maxx = 0
   @@maxy = 0
   @@elves_cnt = 0
+  @elve_no = 0
   @@first_dir = NORTH
   @@proposed_move = {}
   @@map = {}
 
   def initialize( x, y )
     @x, @y = x, y
+    @@elves_cnt += 1
+    @elve_no = @@elves_cnt
+    placeOnMap
+    resetProposedMove
   end
 
   def setBounds( maxx, maxy )
     @@maxx = maxx > @@maxx ? maxx : @@maxy
     @@maxy = maxy > @@maxy ? maxy : @@maxy
+  end
+
+  def maxx()
+    @@maxx
+  end
+
+  def maxy()
+    @@maxy
   end
 
   def coordH( x = nil, y = nil )
@@ -72,6 +90,14 @@ class Elve
 
   def placeOnMap()
     @@map[ coordH ] = self
+  end
+
+  def map
+    @@map
+  end
+
+  def proposedMove
+    @@proposed_move
   end
 
   def placeProposedMove( x, y )
@@ -87,6 +113,10 @@ class Elve
     end
   end
 
+  def setProposedMove( x, y )
+    @proposed_x, @proposed_y = x, y
+  end
+
   def resetProposedMove()
     @proposed_x, @proposed_y = -1, -1
   end
@@ -95,17 +125,21 @@ class Elve
     @@map[ coordH( x, y ) ]
   end
 
+  def outer( x, y )
+    x < 0 || y < 0 || x > @@maxx || y > @@maxy
+  end
+
   def free?( x, y )
-    getFromMap( x, y ) == nil
+    outer( x, y ) || getFromMap( x, y ) == nil
   end
 
   def freeAround?( x = nil, y = nil )
     x = @x if x == nil
     y = @y if y == nil
 
-    @@map[ coordH( x-1, y-1 )] == nil and @@map[ coordH( x, y-1 )] == nil and @@map[ coordH( x+1, y-1 )] == nil and
-      @@map[ coordH( x-1, y )] == nil and @@map[ coordH( x, y )] == nil and @@map[ coordH( x+1, y )] == nil and
-      @@map[ coordH( x-1, y+1 )] == nil and @@map[ coordH( x, y+1 )] == nil and @@map[ coordH( x+1, y+1 )] == nil
+    free?( x-1, y-1 ) && free?( x, y-1 ) && free?( x+1, y-1 ) &&
+      free?( x-1, y ) && free?( x, y ) && free?( x+1, y ) &&
+      free?( x-1, y+1 ) && free?( x, y+1 ) && free?( x+1, y+1 )
   end
 
   def getFromProposedMove( x, y )
@@ -113,11 +147,16 @@ class Elve
   end
 
   def draw()
-    cdraw( @x, @y, '#', COLELVE )
+    cdraw( @x, @y, @proposed_x == -1 ? '#' : "x", COLELVE )
+    cdraw( @proposed_x, @proposed_y, '*'  ) if @proposed_x != -1
   end
 
   def newRound()
     @@proposed_move = {}
+  end
+
+  def resetMap()
+    @@map = {}
   end
 
   def move()
@@ -129,41 +168,47 @@ class Elve
 
     if not freeAround?
       loop do
+        x, y = @x, @y
         case move_dir
         when NORTH
           if y > 0
             y -= 1
+            #puts "check north #{@x},#{@y} #{free?( x-1, y )} #{free?( x, y )} #{free?( x+1, y )}"
             if x > 0 and free?( x-1, y ) and free?( x, y ) and free?( x+1, y )
+              cp "move to north #{@x},#{@y}->#{x},#{y}   "
               placeProposedMove( x, y )
-              @proposed_x, @proposed_y = x, y
+              setProposedMove( x, y )
               moved = true
             end
           end
         when SOUTH
-          if y < @maxy
+          if y < @@maxy
             y += 1
             if x > 0 and free?( x-1, y ) and free?( x, y ) and free?( x+1, y )
+              cp "move to south #{@x},#{@y}->#{x},#{y}   "
               placeProposedMove( x, y )
               moved = true
-              @proposed_x, @proposed_y = x, y
-            end
-          end
-        when EAST
-          if x > 0
-            x -= 1
-            if y > 0 and free?( x, y-1 ) and free?( x, y ) and free?( x, y+1 )
-              placeProposedMove( x, y )
-              moved = true
-              @proposed_x, @proposed_y = x, y
+              setProposedMove( x, y )
             end
           end
         when WEST
-          if x < @maxx
-            x += 1
+          if x > 0
+            x -= 1
             if y > 0 and free?( x, y-1 ) and free?( x, y ) and free?( x, y+1 )
+              cp "move to east #{@x},#{@y}->#{x},#{y}   "
               placeProposedMove( x, y )
               moved = true
-              @proposed_x, @proposed_y = x, y
+              setProposedMove( x, y )
+            end
+          end
+        when EAST
+          if x < @@maxx
+            x += 1
+            if y > 0 and free?( x, y-1 ) and free?( x, y ) and free?( x, y+1 )
+              cp "move to west #{@x},#{@y}->#{x},#{y}   "
+              placeProposedMove( x, y )
+              moved = true
+              setProposedMove( x, y )
             end
           end
         end
@@ -178,7 +223,7 @@ class Elve
 
   def finalizeRound
     if @proposed_x != -1
-      if @@proposed_move[ coordH( @proposed_x, @proposed_y )].length > 1
+      if @@proposed_move[ coordH( @proposed_x, @proposed_y )] != nil && @@proposed_move[ coordH( @proposed_x, @proposed_y )].length > 1
         @@proposed_move[ coordH( @proposed_x, @proposed_y ) ].each do |e|
           e.resetProposedMove
         end
@@ -188,9 +233,25 @@ class Elve
         resetProposedMove
       end
     end
+    placeOnMap
+  end
+
+
+  def to_s()
+    "Elve #{@elve_no} #{@x},#{@y} #{@proposed_x != -1 ? @proposed_x : ''} #{@proposed_y != -1 ? @proposed_y : ''}"
   end
 end
 
+
+def clrMap(e)
+  (0..e.maxy).each do |l|
+    (0..e.maxx).each do |c|
+      cpos l,c
+      cp "."
+    end
+    Curses.clrtoeol
+  end
+end
 
 
 # Curses
@@ -219,29 +280,55 @@ begin
     y += 1
   end
 
+
+  clrMap( elves[0] )
   elves.each do |e|
     e.draw
   end
+
+  cpp( 35, 0, "#{elves[0].map}" )
+
+  Curses.getch
+
+  round_no_wait = false
 
   10.times do |i|
     elves[0].resetProposedMoveMap
 
     elves.each do |e|
       e.move
+      elves.each do |e1|
+        e1.draw
+      end
+      cpos 30,0
+      cp "Round #{i}, #{e}"
+      if round_no_wait == false
+        case Curses.getch
+        when "q"
+          break
+        when "f"
+          round_no_wait = true
+        end
+      end
     end
+
+
+    elves[0].resetMap
 
     elves.each do |e|
       e.finalizeRound
     end
 
+    clrMap( elves[0] )
+
     elves.each do |e|
       e.draw
     end
 
-    cpos 30,0
-    cp "Round #{i}"
+    cpp( 30, 0, "Round #{i} Finalized, #{elves[0].proposedMove},  #{elves[0].map}" )
+    cpp( 35, 0, "#{elves[0].map}" )
 
-    Curses.getch
+    break if Curses.getch == "q"
   end
 
 
